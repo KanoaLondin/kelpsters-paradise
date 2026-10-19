@@ -943,9 +943,14 @@ function removePeer(id) {
   scene.remove(p.cat.g); p.tag.el.remove(); delete peers[id]; updateCount();
 }
 const myState = () => ({x: +me.x.toFixed(2), y: +me.y.toFixed(2), z: +me.z.toFixed(2), r: +me.r.toFixed(2), m: me.moving, f: !!me.fast, a: !me.onGround});
+// Relay for players whose networks block a direct peer-to-peer link (different Wi-Fi, phone hotspots).
+// Metered free trial, 500 MB; only relayed sessions use it. Public on purpose: worst case someone burns the quota.
+const TURN_LOGIN = {username: 'fff4b1a33bd69e059c44ec08', credential: 'WGhYEePDTtA08hRP'};
+const TURN = ['turn:global.relay.metered.ca:80', 'turn:global.relay.metered.ca:80?transport=tcp',
+  'turn:global.relay.metered.ca:443', 'turns:global.relay.metered.ca:443?transport=tcp'].map(urls => ({urls, ...TURN_LOGIN}));
 function connect() {
   const roomId = new URLSearchParams(location.search).get('room') || 'lobby';
-  room = joinRoom({appId: 'kanoaz-cat-aquarium-v1'}, roomId);
+  room = joinRoom({appId: 'kanoaz-cat-aquarium-v1', turnConfig: TURN}, roomId);
   const st = room.makeAction('st'), hi = room.makeAction('hi'), sy = room.makeAction('say'), ch = room.makeAction('chat');
   send = {st: () => st.send(myState()), say: t => sy.send(t), chat: t => ch.send(t)};
   room.onPeerJoin = id => { hi.send({n: me.name, c: me.coat}, {target: id}); st.send(myState(), {target: id}); };
