@@ -26,6 +26,7 @@
   #hud{position:fixed;top:12px;left:12px;display:none;flex-direction:column;gap:6px;align-items:flex-start;font-size:14px}
   .pill{background:rgba(0,0,0,.45);padding:6px 12px;border-radius:999px;border:none;color:#fff;font-size:13px}
   #invite{cursor:pointer}
+  #net{border-radius:10px;font-size:11px;opacity:.85;white-space:pre-line;max-width:min(340px,70vw)}
   #btns{position:fixed;right:16px;bottom:16px;display:none;gap:8px;flex-wrap:wrap;justify-content:flex-end;max-width:calc(100vw - 180px)}
   .act{padding:13px 18px;font-size:17px;border-radius:999px;border:none;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.4)}
   #meow{background:#ffd166;color:#3a2600} #miao{background:#ff8fb8;color:#3d0a1e} #kelp{background:#4ccf6a;color:#06300f}
@@ -61,7 +62,7 @@
     <p class="credit">Cat model: <a href="https://sketchfab.com/3d-models/lowpoly-cat-rig-run-animation-c36df576c9ae4ed28e89069b1a2f427a" target="_blank" rel="noopener">"Lowpoly Cat Rig + Run Animation"</a> by <a href="https://sketchfab.com/dailyfree3d" target="_blank" rel="noopener">Daily Lowpoly</a>, <a href="http://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC-BY 4.0</a></p>
   </div>
 </div>
-<div id="hud"><div class="pill" id="count">🐾 1 cat here</div><button class="pill" id="invite">🔗 Copy invite link</button></div>
+<div id="hud"><div class="pill" id="count">🐾 1 cat here</div><button class="pill" id="invite">🔗 Copy invite link</button><div class="pill" id="net"></div></div>
 <div id="help">WASD / arrows · walk<br>Double-tap W · sprint<br>Space · jump<br>Drag · look around<br>Enter · chat<br>M meow · N miao · K kelp<br>Esc · leave</div>
 <div id="chat"><div id="log"></div><input id="msg" maxlength="120" placeholder="Press Enter to chat" autocomplete="off"></div>
 <div id="btns">
@@ -82,7 +83,7 @@ import {UnrealBloomPass} from 'three/addons/postprocessing/UnrealBloomPass.js';
 import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {clone as cloneSkinned} from 'three/addons/utils/SkeletonUtils.js';
-import {joinRoom} from 'https://cdn.jsdelivr.net/npm/trystero@0.25.4/+esm';
+import {joinRoom, getRelaySockets} from 'https://cdn.jsdelivr.net/npm/trystero@0.25.4/+esm';
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -948,9 +949,36 @@ const myState = () => ({x: +me.x.toFixed(2), y: +me.y.toFixed(2), z: +me.z.toFix
 const TURN_LOGIN = {username: 'fff4b1a33bd69e059c44ec08', credential: 'WGhYEePDTtA08hRP'};
 const TURN = ['turn:global.relay.metered.ca:80', 'turn:global.relay.metered.ca:80?transport=tcp',
   'turn:global.relay.metered.ca:443', 'turns:global.relay.metered.ca:443?transport=tcp'].map(urls => ({urls, ...TURN_LOGIN}));
+// Connection readout (top left), to see where it breaks when two players can't find each other
+const BUILD = '10-19c', roomId = new URLSearchParams(location.search).get('room') || 'lobby';
+const pcs = new Set();
+class TrackedPC extends RTCPeerConnection { constructor(c) { super(c); pcs.add(this); } }
+let relayTest = 'testing…';
+{ // can this network reach the relay at all?
+  const pc = new RTCPeerConnection({iceServers: TURN, iceTransportPolicy: 'relay'}); pc.createDataChannel('t');
+  const done = r => { if (relayTest === 'testing…') { relayTest = r; pc.close(); } };
+  pc.onicecandidate = e => e.candidate ? / typ relay/.test(e.candidate.candidate) && done('reachable') : done('BLOCKED');
+  setTimeout(() => done('BLOCKED'), 10000);
+  pc.createOffer().then(o => pc.setLocalDescription(o));
+}
+async function linkState(pc) {
+  if (pc.connectionState !== 'connected') return pc.connectionState;
+  const s = await pc.getStats(); let pair;
+  s.forEach(r => { if (r.type === 'candidate-pair' && r.state === 'succeeded' && r.nominated) pair ||= r; });
+  return pair && [pair.localCandidateId, pair.remoteCandidateId].some(id => s.get(id)?.candidateType === 'relay') ? 'connected via relay' : 'connected direct';
+}
+setInterval(async () => {
+  if (!room) return;
+  const socks = Object.values(getRelaySockets()), up = socks.filter(w => w.readyState === 1).length;
+  for (const pc of pcs) if (pc.connectionState === 'closed') pcs.delete(pc);
+  const names = new Map(Object.entries(room.getPeers()).map(([id, pc]) => [pc, peers[id]?.name || 'cat']));
+  const live = [...pcs].filter(pc => names.has(pc) || pc.connectionState !== 'new'); // unnamed 'new' ones are Trystero's spare offers
+  const links = await Promise.all(live.map(async pc => `${names.get(pc) || 'a cat'}: ${await linkState(pc)}`));
+  $('net').textContent = `build ${BUILD} · room "${roomId}"\nmatchmaking servers: ${up}/${socks.length} reachable\nrelay: ${relayTest}\n` +
+    (links.length ? links.join('\n') : 'no other cats found yet');
+}, 1500);
 function connect() {
-  const roomId = new URLSearchParams(location.search).get('room') || 'lobby';
-  room = joinRoom({appId: 'kanoaz-cat-aquarium-v1', turnConfig: TURN}, roomId);
+  room = joinRoom({appId: 'kanoaz-cat-aquarium-v1', turnConfig: TURN, rtcPolyfill: TrackedPC}, roomId);
   const st = room.makeAction('st'), hi = room.makeAction('hi'), sy = room.makeAction('say'), ch = room.makeAction('chat');
   send = {st: () => st.send(myState()), say: t => sy.send(t), chat: t => ch.send(t)};
   room.onPeerJoin = id => { hi.send({n: me.name, c: me.coat}, {target: id}); st.send(myState(), {target: id}); };
