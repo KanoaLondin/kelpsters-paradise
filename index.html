@@ -55,10 +55,7 @@
   <div class="card">
     <h1>🌿 Kelpster's Paradise</h1>
     <p class="sub">A walk-through aquarium for cats. Meow at friends.</p>
-    <input id="name" maxlength="16" placeholder="Your username" autocomplete="off">
-    <div class="coats" id="coats"></div>
-    <div class="coatname" id="coatname"></div>
-    <button class="go" id="go" disabled>Dive in</button>
+    <p class="sub" style="opacity:1;font-size:17px;font-weight:700">Sorry, but you've lost the privilege to have access to the aquarium.</p>
     <p class="credit">Cat model: <a href="https://sketchfab.com/3d-models/lowpoly-cat-rig-run-animation-c36df576c9ae4ed28e89069b1a2f427a" target="_blank" rel="noopener">"Lowpoly Cat Rig + Run Animation"</a> by <a href="https://sketchfab.com/dailyfree3d" target="_blank" rel="noopener">Daily Lowpoly</a>, <a href="http://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC-BY 4.0</a></p>
   </div>
 </div>
@@ -892,19 +889,6 @@ function placeTag(tag, pos) {
 const $ = id => document.getElementById(id);
 const store = {get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} }};
 let chosenCoat = COATS[store.get('coat')] ? store.get('coat') : 'tabby';
-for (const [key, c] of Object.entries(COATS)) {
-  const b = document.createElement('button'); b.className = 'coat'; b.style.background = c.swatch; b.title = c.label; b.setAttribute('aria-label', c.label);
-  b.dataset.key = key; b.onclick = () => { chosenCoat = key; refreshCoats(); }; $('coats').append(b);
-}
-function refreshCoats() {
-  document.querySelectorAll('.coat').forEach(b => b.classList.toggle('sel', b.dataset.key === chosenCoat));
-  $('coatname').textContent = COATS[chosenCoat].label;
-}
-refreshCoats();
-const syncGo = () => $('go').disabled = !$('name').value.trim();
-$('name').oninput = syncGo; syncGo();
-$('name').onkeydown = e => { if (e.key === 'Enter' && !$('go').disabled) start(); };
-$('go').onclick = start;
 
 // ---------- player, networking, chat ----------
 const SAYINGS = ['Meow!', 'Miao!', 'Kelp!'];
